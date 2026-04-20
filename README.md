@@ -7,3 +7,6 @@ CANopen is implemented on AM64x microcontrollers.
 ZMQ based simulation is also implemented to allow testing and verification without hardware.
 
 It is written in C programming language.
+
+How to test it.
+Add CANopenNode by git clone https://github.com/canopennode/canopennode
