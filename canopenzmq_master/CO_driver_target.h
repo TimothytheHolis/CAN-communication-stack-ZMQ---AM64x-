@@ -28,7 +28,7 @@
 #include <stdint.h>
 
 #ifdef CO_DRIVER_CUSTOM
-#include "CO_driver_custom.h"
+//#include "CO_driver_custom.h"
 #endif
 
 #ifdef __cplusplus
@@ -36,6 +36,11 @@ extern "C" {
 #endif
 
 /* Stack configuration override default values. For more information see file CO_config.h. */
+
+#undef CO_CONFIG_LSS                  //deconfigure LSS
+#define CO_CONFIG_NMT            0x00 // deconfigure NMT master
+#undef CO_CONFIG_STORAGE_ENABLE       //deconfigure storage
+#define CO_CONFIG_STORAGE_ENABLE 0x00 // deconfigure storage
 
 /* Basic definitions. If big endian, CO_SWAP_xx macros must swap bytes. */
 #define CO_LITTLE_ENDIAN
@@ -49,13 +54,25 @@ typedef uint_fast8_t bool_t;
 typedef float float32_t;
 typedef double float64_t;
 
+/**
+ * \brief           CAN RX message for platform
+ *
+ * This is platform specific one
+ */
+typedef struct {
+    uint32_t ident;  /*!< Standard identifier */
+    uint8_t dlc;     /*!< Data length */
+    uint8_t data[8]; /*!< Received data */
+} CO_CANrxMsg_t;
+
 /* Access to received CAN message */
-#define CO_CANrxMsg_readIdent(msg) ((uint16_t)0)
-#define CO_CANrxMsg_readDLC(msg)   ((uint8_t)0)
-#define CO_CANrxMsg_readData(msg)  ((const uint8_t*)NULL)
+#define CO_CANrxMsg_readIdent(msg) ((uint16_t)(((CO_CANrxMsg_t*)(msg)))->ident)
+#define CO_CANrxMsg_readDLC(msg)   ((uint8_t)(((CO_CANrxMsg_t*)(msg)))->dlc)
+#define CO_CANrxMsg_readData(msg)  ((uint8_t*)(((CO_CANrxMsg_t*)(msg)))->data)
 
 /* Received message object */
-typedef struct {
+typedef struct 
+{
     uint16_t ident;
     uint16_t mask;
     void* object;
@@ -63,7 +80,8 @@ typedef struct {
 } CO_CANrx_t;
 
 /* Transmit message object */
-typedef struct {
+typedef struct 
+{
     uint32_t ident;
     uint8_t DLC;
     uint8_t data[8];
@@ -72,7 +90,8 @@ typedef struct {
 } CO_CANtx_t;
 
 /* CAN module object */
-typedef struct {
+typedef struct 
+{
     void* CANptr;
     CO_CANrx_t* rxArray;
     uint16_t rxSize;
@@ -88,7 +107,8 @@ typedef struct {
 } CO_CANmodule_t;
 
 /* Data storage object for one entry */
-typedef struct {
+typedef struct 
+{
     void* addr;
     size_t len;
     uint8_t subIndexOD;

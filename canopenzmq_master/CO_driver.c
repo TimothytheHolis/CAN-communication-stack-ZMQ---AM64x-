@@ -1,12 +1,16 @@
 /*
  * CAN module object for generic microcontroller.
  *
- * This file is a template for other microcontrollers.
+ * This file has been adapted for TCP communication with ZMQ client.
+ * It is based on the template for other microcontrollers, canopennode/example/CO_driver_blank.c.
+ * from the CANopenNode project https://github.com/CANopenNode/CANopenNode
  *
- * @file        CO_driver_zmqreq.c
+ * @file        CO_driver.c
  * @ingroup     CO_driver
- * @author      Janez Paternoster
- * @copyright   2004 - 2020 Janez Paternoster
+ * @author Janez Paternoster
+ * @modified Timothy Mukhooli
+ * @copyright 2004 - 2020 Janez Paternoster
+ * @copyright 2026 TimothytheHolis
  *
  * This file is part of <https://github.com/CANopenNode/CANopenNode>, a CANopen Stack.
  *
@@ -21,11 +25,43 @@
  */
 
 #include "301/CO_driver.h"
+#include "canopen_app.h"
+#include <zmq.h>
+#include <string.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <assert.h>
+
+/* CAN masks for identifiers */
+#define CANID_MASK 0x07FF /*!< CAN standard ID mask */
+#define FLAG_RTR   0x8000 /*!< RTR flag, part of identifier */
+
+/* Global ZMQ context and socket for the module */
+static void *context   = NULL;
+static void *requester = NULL;
+
+/**
+ * Call back function for sent CAN message.
+ *
+ * @param CANmodule This object.
+ */
+static void CO_CANsendcallback(CO_CANmodule_t* CANmodule);
 
 void
 CO_CANsetConfigurationMode(void* CANptr)
 {
     /* Put CAN module in configuration mode */
+    /* Close zmq connection */
+    if (requester != NULL) 
+    {
+        zmq_close(requester);
+        requester = NULL;
+    }
+    if (context != NULL) 
+    {
+        zmq_ctx_destroy(context);
+        context = NULL;
+    }
 }
 
 void
@@ -88,27 +124,6 @@ CO_CANmodule_init(CO_CANmodule_t* CANmodule, void* CANptr, CO_CANrx_t rxArray[],
         txArray[i].bufferFull = false;
     }
 
-    /* Configure CAN module registers */
-
-    /* Configure CAN timing */
-
-    /* Configure CAN module hardware filters */
-    if (CANmodule->useCANrxFilters) 
-    {
-        /* CAN module filters are used, they will be configured with */
-        /* CO_CANrxBufferInit() functions, called by separate CANopen */
-        /* init functions. */
-        /* Configure all masks so, that received message must match filter */
-    } 
-    else 
-    {
-        /* CAN module filters are not used, all messages with standard 11-bit */
-        /* identifier will be received */
-        /* Configure mask 0 so, that all messages with standard identifier are accepted */
-    }
-
-    /* configure CAN interrupt registers */
-
     return CO_ERROR_NO;
 }
 
@@ -119,10 +134,10 @@ CO_CANmodule_disable(CO_CANmodule_t* CANmodule)
     {
         /* turn off the module */
         /* Close zmq connection */
-        if (socket != NULL) 
+        if (requester != NULL) 
         {
-            zmq_close(socket);
-            socket = NULL;
+            zmq_close(requester);
+            requester = NULL;
         }
         if (context != NULL) 
         {
@@ -188,8 +203,7 @@ CO_CANtxBufferInit(CO_CANmodule_t* CANmodule, uint16_t index, uint16_t ident, bo
     return buffer;
 }
 
-int
-zmq_req_send(CO_CANtx_t* buffer)
+static int zmq_req_send(CO_CANtx_t* buffer)
 {
     /* Send data */
     CO_CANrxMsg_t data_to_send = 
@@ -198,7 +212,8 @@ zmq_req_send(CO_CANtx_t* buffer)
         .dlc   = (buffer->DLC),
         .data  = {0}
     };
-    for (int i = 0; i < 8; i++)
+    int i;
+    for (i = 0; i < 8; i++)
     {
         data_to_send.data[i] = buffer->data[i];
     }
@@ -241,14 +256,18 @@ CO_CANsend(CO_CANmodule_t* CANmodule, CO_CANtx_t* buffer)
     /* if CAN TX buffer is free, copy message to it */
     if (zmq_req_send(buffer) && CANmodule->CANtxCount == 0)
     {
+        CO_CANsendcallback(CANmodule);
         CANmodule->bufferInhibitFlag = buffer->syncFlag;
-        /* copy message and txRequest */
     }
     /* if no buffer is free, message will be sent by interrupt */
     else 
     {
-        buffer->bufferFull = true;
-        CANmodule->CANtxCount++;
+        /* Only increment count if buffer wasn't already full */
+        if (!buffer->bufferFull)
+        {
+            buffer->bufferFull = true;
+            CANmodule->CANtxCount++;
+        }
     }
     CO_UNLOCK_CAN_SEND(CANmodule);
 
@@ -385,8 +404,8 @@ CO_CANrecv(CO_CANmodule_t* CANmodule)
         .data = {0}
     };
     printf("receiving... \n");
-    int send_status = zmq_send(socket, &req_recv_data, sizeof(CO_CANrxMsg_t), 0);
-    int recv_status = zmq_recv(socket, &data_to_recv, sizeof(CO_CANrxMsg_t), 0);
+    int send_status = zmq_send(requester, &req_recv_data, sizeof(CO_CANrxMsg_t), 0);
+    int recv_status = zmq_recv(requester, &data_to_recv, sizeof(CO_CANrxMsg_t), 0);
     printf("Received: CAN ID = %u, DLC = %u, data = ", data_to_recv.ident, data_to_recv.dlc);
     for (int i = 0; i < 8; i++)
     {
@@ -395,7 +414,8 @@ CO_CANrecv(CO_CANmodule_t* CANmodule)
     printf("\n");
     printf("receive status: %d send status: %d\n", recv_status, send_status);
 
-    rcvMsg = data_to_recv;
+    rcvMsg = &data_to_recv;
+    rcvMsgIdent = rcvMsg->ident;
     if (CANmodule->useCANrxFilters) 
     {
         /* CAN module filters are used. Message with known 11-bit identifier has been received */
@@ -403,7 +423,8 @@ CO_CANrecv(CO_CANmodule_t* CANmodule)
         if (index < CANmodule->rxSize) {
             buffer = &CANmodule->rxArray[index];
             /* verify also RTR */
-            if (((rcvMsgIdent ^ buffer->ident) & buffer->mask) == 0U) {
+            if (((rcvMsgIdent ^ buffer->ident) & buffer->mask) == 0U)
+            {
                 msgMatched = true;
             }
         }
@@ -431,8 +452,8 @@ CO_CANrecv(CO_CANmodule_t* CANmodule)
     }
 }
 
-void
-CO_CANsent(CO_CANmodule_t* CANmodule)
+static void
+CO_CANsendcallback(CO_CANmodule_t* CANmodule)
 {
     /* First CAN message (bootup) was sent successfully */
     CANmodule->firstCANtxMessage = false;
@@ -442,30 +463,27 @@ CO_CANsent(CO_CANmodule_t* CANmodule)
     if (CANmodule->CANtxCount > 0U)
     {
         uint16_t i; /* index of transmitting message */
-
         /* first buffer */
         CO_CANtx_t* buffer = &CANmodule->txArray[0];
+        CO_LOCK_CAN_SEND(CANmodule);
         /* search through whole array of pointers to transmit message buffers. */
-        for (i = CANmodule->txSize; i > 0U; i--) 
+        for (i = CANmodule->txSize; i > 0U; i--, ++buffer) 
         {
-            /* if message buffer is full, send it. */
             if (buffer->bufferFull) 
             {
-                buffer->bufferFull = false;
-                CANmodule->CANtxCount--;
-
-                /* Copy message to CAN buffer */
-                CANmodule->bufferInhibitFlag = buffer->syncFlag;
-                /* canSend... */
-                break; /* exit for loop */
+                if (zmq_req_send(buffer))
+                {
+                    buffer->bufferFull = false;
+                    CANmodule->CANtxCount--;
+                    /* Copy message to CAN buffer */
+                    CANmodule->bufferInhibitFlag = buffer->syncFlag;
+                }
+                else
+                {
+                    break;
+                }
             }
-            buffer++;
-        } /* end of for loop */
-
-        /* Clear counter if no more messages */
-        if (i == 0U) 
-        {
-            CANmodule->CANtxCount = 0U;
         }
+        CO_UNLOCK_CAN_SEND(CANmodule);
     }
 }

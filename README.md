@@ -1,12 +1,58 @@
-# CAN-communication-stack-ZMQ---AM64x-
-CANopen communication stack on AM64x with ZMQ simulation for testing without hardware
+# CANopen ZMQ Simulation + AM64x Deployment
 
-This code uses CANopen protocol stack from CANopenNode, https://github.com/CANopenNode/CANopenNode
+This project implements a CANopen communication stack using the CANopenNode library, with support for both:
 
-CANopen is implemented on AM64x microcontrollers.
-ZMQ based simulation is also implemented to allow testing and verification without hardware.
+* PC-based simulation using ZeroMQ
+* Embedded deployment on AM64x microcontrollers
 
-It is written in C programming language.
+## Overview
 
-How to test it.
-Add CANopenNode by git clone https://github.com/canopennode/canopennode
+The system is structured into three layers:
+
+Application Layer (canopen_app)
+↓
+CANopen Stack (CANopenNode)
+↓
+Transport Layer (ZMQ or MCAN driver)
+
+This design allows the same CANopen logic to be reused across simulation and hardware, with only the transport layer changing.
+
+## Dependencies
+
+* CANopenNode
+  https://github.com/CANopenNode/CANopenNode
+
+* ZeroMQ (for simulation)
+  Installed via vcpkg:
+
+  vcpkg install czmq:x64-windows-static
+
+## Setup
+
+1. Clone CANopenNode into project root:
+   git clone https://github.com/CANopenNode/CANopenNode canopennode
+
+2. Install zmq
+   sudo apt install zmq
+
+3. Build:
+
+   make clean
+   make
+   ./master
+
+## Notes
+
+* CANopenNode source is used without modification
+* Platform-specific drivers are isolated
+* Same application logic is reused across:
+
+  * Master node
+  * Slave node
+  * Embedded target
+
+## Future Work
+
+* Add slave node implementation
+* Integrate AM64x MCAN driver
+* Add timing abstraction layer
