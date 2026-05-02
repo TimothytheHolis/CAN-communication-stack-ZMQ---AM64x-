@@ -1,7 +1,7 @@
 # Makefile for CANopenNode testing with zmq
 
 DRV_SRC = .
-CANOPEN_SRC = ../canopennode
+CANOPEN_SRC = ../CANopenNode
 APPL_SRC = ..
 
 LINK_TARGET = master

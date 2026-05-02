@@ -21,11 +21,17 @@
 
 int main(void)
 {
-    CANopenNode* canopenNode = NULL;
-    canopenNode->desiredNodeID = 1;
-    canopenNode->baudrate = 125;
-    canopenNode->canOpenStack = NULL;
+    CANopenNode* canopennode = NULL;
 
-    canopen_app_init(canopenNode);
+    /* Create and initialize CANopen object */
+    CANopenNode node = {
+        .desiredNodeID = 1,
+        .baudrate = 125,
+        .activeNodeID = 0,
+        .canOpenStack = NULL
+    };
+
+    canopennode = &node;
+    canopen_app_init(canopennode);
     return 0;
 }

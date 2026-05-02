@@ -1,1 +1,32 @@
+# ===== Build outputs =====
 *.o
+*.out
+*.elf
+*.bin
+*.hex
+
+# Executables
+master
+slave
+canopennode_blank
+
+# ===== Debug / temp =====
+*.log
+*.tmp
+
+# ===== CMake (future use) =====
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# ===== VS Code =====
+.vscode/
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== Optional: ignore CANopenNode if using submodule later =====
+# CANopenNode/

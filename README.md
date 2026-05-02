@@ -23,9 +23,7 @@ This design allows the same CANopen logic to be reused across simulation and har
   https://github.com/CANopenNode/CANopenNode
 
 * ZeroMQ (for simulation)
-  Installed via vcpkg:
-
-  vcpkg install czmq:x64-windows-static
+  sudo apt install zmq
 
 ## Setup
 
