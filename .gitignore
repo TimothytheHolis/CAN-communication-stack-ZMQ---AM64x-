@@ -15,11 +15,11 @@ canopennode_blank
 *.tmp
 
 # ===== CMake (future use) =====
-build/
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
+# build/
+# CMakeFiles/
+# CMakeCache.txt
+# cmake_install.cmake
+# Makefile
 
 # ===== VS Code =====
 .vscode/

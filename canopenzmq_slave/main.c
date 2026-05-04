@@ -17,18 +17,10 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 
- #include <stdio.h>
  #include "canopen_app.h"
-
- #define _POSIX_C_SOURCE 200809L
- #include <time.h>
 
 int main(void)
 {
-    struct timespec start;
-    struct timespec end;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
     CANopenNode* canopennode = NULL;
 
     /* Create and initialize CANopen object */
@@ -41,11 +33,7 @@ int main(void)
 
     canopennode = &node;
     canopen_app_init(canopennode);
-
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    uint32_t timeDifference_us = (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_nsec - start.tv_nsec) / 1000;
-    printf("Initialization time: %u microseconds\n", timeDifference_us);
-
-    canopen_app_process (1000);
     return 0;
+
+    CO_CANrecv(canopennode->canOpenStack->CANmodule);
 }

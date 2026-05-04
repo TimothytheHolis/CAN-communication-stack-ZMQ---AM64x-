@@ -4,7 +4,7 @@ DRV_SRC = .
 CANOPEN_SRC = ../CANopenNode
 APPL_SRC = ..
 
-LINK_TARGET = master.out
+LINK_TARGET = slave.out
 
 INCLUDE_DIRS = \
 	-I$(DRV_SRC) \

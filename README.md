@@ -1,13 +1,10 @@
 # CANopen ZMQ Simulation + AM64x Deployment
 
-This project implements a CANopen communication stack using the CANopenNode library, with support for both:
+A portable CANopen communication stack built on [CANopenNode](https://github.com/CANopenNode/CANopenNode), supporting both PC-based simulation via ZeroMQ and embedded deployment on AM64x targets.
 
-* PC-based simulation using ZeroMQ
-* Embedded deployment on AM64x microcontrollers
+## Architecture
 
-## Overview
-
-The system is structured into three layers:
+The stack is organized into three decoupled layers:
 
 Application Layer (canopen_app)
 ↓
@@ -15,42 +12,55 @@ CANopen Stack (CANopenNode)
 ↓
 Transport Layer (ZMQ or MCAN driver)
 
-This design allows the same CANopen logic to be reused across simulation and hardware, with only the transport layer changing.
+Swapping the transport layer is the only change needed to move between simulation and hardware. All application and protocol logic remains identical across master, slave, and embedded targets.
 
-## Dependencies
+## Prerequisites
 
-* CANopenNode
-  https://github.com/CANopenNode/CANopenNode
-
-* ZeroMQ (for simulation)
-  sudo apt install zmq
+| Dependency                                                | Purpose                | Install                                       |
+|-----------------------------------------------------------|------------------------|-----------------------------------------------|
+| [CANopenNode](https://github.com/CANopenNode/CANopenNode) | CANopen protocol stack | Cloned into project root (see Setup)          |
+| ZeroMQ (`libzmq`)                                         | Simulation transport   | `sudo apt install libzmq3-dev`                |
+| GCC / Make                                                | Build toolchain        | `sudo apt install build-essential`            |
+| C/C++ Extension (optional)                                | VS Code IntelliSense   | `code --install-extension ms-vscode.cpptools` |
 
 ## Setup
 
-1. Clone CANopenNode into project root:
-   git clone https://github.com/CANopenNode/CANopenNode canopennode
+**1. Clone this repository**
 
-2. Install zmq
-   sudo apt install zmq
+```bash
+git clone <this-repo-url> canopen-zmq
+cd canopen-zmq
+```
 
-3. Build:
+**2. Clone CANopenNode into the project root**
 
-   make clean
-   make
-   ./master
+```bash
+git clone https://github.com/CANopenNode/CANopenNode canopennode
+```
 
-## Notes
+**3. Install ZeroMQ development headers**
 
-* CANopenNode source is used without modification
-* Platform-specific drivers are isolated
-* Same application logic is reused across:
+```bash
+sudo apt install libzmq3-dev
+```
 
-  * Master node
-  * Slave node
-  * Embedded target
+**4. Build and run**
 
-## Future Work
+```bash
+make clean && make
+./master
+```
 
-* Add slave node implementation
-* Integrate AM64x MCAN driver
-* Add timing abstraction layer
+## Contributing
+
+CANopenNode source is used **without modification**. Platform-specific code lives exclusively in `transport/`. When contributing:
+
+- Keep application logic in `canopen_app/` transport-agnostic.
+- New transport backends should implement the same driver interface as the ZMQ transport.
+- Open an issue before starting large changes.
+
+## Roadmap
+
+- [ ] Slave node implementation
+- [ ] AM64x MCAN driver integration  
+- [ ] Timing abstraction layer

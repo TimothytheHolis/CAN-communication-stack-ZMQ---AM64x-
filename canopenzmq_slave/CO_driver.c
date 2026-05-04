@@ -38,7 +38,7 @@
 
 /* Global ZMQ context and socket for the module */
 static void *context   = NULL;
-static void *requester = NULL;
+static void *replier   = NULL;
 
 /**
  * Call back function for sent CAN message.
@@ -52,10 +52,10 @@ CO_CANsetConfigurationMode(void* CANptr)
 {
     /* Put CAN module in configuration mode */
     /* Close zmq connection */
-    if (requester != NULL) 
+    if (replier != NULL) 
     {
-        zmq_close(requester);
-        requester = NULL;
+        zmq_close(replier);
+        replier = NULL;
     }
     if (context != NULL) 
     {
@@ -75,11 +75,11 @@ CO_CANsetNormalMode(CO_CANmodule_t* CANmodule)
     }
 
     /* Create a REQ (Request) socket */
-    if (requester == NULL)
+    if (replier == NULL)
     {
-        requester = zmq_socket(context, ZMQ_REQ);
+        replier = zmq_socket(context, ZMQ_REP);
         /* Connect to the server on localhost port 5555 */
-        int status = zmq_connect(requester, "tcp://localhost:5555");
+        int status = zmq_connect(replier, "tcp://localhost:5555");
         printf("Status of connection: %d\n", status);
     }
 
@@ -134,10 +134,10 @@ CO_CANmodule_disable(CO_CANmodule_t* CANmodule)
     {
         /* turn off the module */
         /* Close zmq connection */
-        if (requester != NULL) 
+        if (replier != NULL) 
         {
-            zmq_close(requester);
-            requester = NULL;
+            zmq_close(replier);
+            replier = NULL;
         }
         if (context != NULL) 
         {
@@ -203,14 +203,21 @@ CO_CANtxBufferInit(CO_CANmodule_t* CANmodule, uint16_t index, uint16_t ident, bo
     return buffer;
 }
 
-static int zmq_req_send(CO_CANtx_t* buffer)
+static int zmq_rep_send(CO_CANtx_t* buffer)
 {
-    /* Send data */
+    //dummy data to receive to ensure proper server functionality
+    CO_CANrxMsg_t recv_dummy_data = 
+    {
+        .ident = 0,
+        .dlc = 0,
+        .data = {0}
+    };
+    // Send data
     CO_CANrxMsg_t data_to_send = 
     {
         .ident = buffer->ident & CANID_MASK,
-        .dlc   = (buffer->DLC),
-        .data  = {0}
+        .dlc = (buffer->DLC),
+        .data = {0}
     };
     int i;
     for (i = 0; i < 8; i++)
@@ -218,22 +225,17 @@ static int zmq_req_send(CO_CANtx_t* buffer)
         data_to_send.data[i] = buffer->data[i];
     }
     printf("sending... \n");
-    /* Send the data */
-    int send_status = zmq_send(requester, &data_to_send, sizeof(CO_CANrxMsg_t), 0);
+    int recv_status = zmq_recv(replier, &recv_dummy_data, sizeof(CO_CANrxMsg_t), 0);
+    int send_status = zmq_send(replier, &data_to_send, sizeof(CO_CANrxMsg_t), 0);
     printf("Sent: CAN ID = %u, DLC = %u, data = ", data_to_send.ident, data_to_send.dlc);
-    for (i = 0; i < 8; i++)
+    for (int i = 0; i < 8; i++)
     {
         printf("%u ", data_to_send.data[i]);
     }
     printf("\n");
-    int recv_status = -1;
-    if (send_status)
-    {
-        /* Wait for reply*/
-        recv_status = zmq_recv(requester, &data_to_send, sizeof(CO_CANrxMsg_t), 0);
-        printf("send status: %d receive status: %d\n", send_status, recv_status);
-    }
-    return recv_status;
+    printf("send status: %d receive status: %d\n", send_status, recv_status);
+
+    return send_status;
 }
 
 CO_ReturnError_t
@@ -254,7 +256,7 @@ CO_CANsend(CO_CANmodule_t* CANmodule, CO_CANtx_t* buffer)
 
     CO_LOCK_CAN_SEND(CANmodule);
     /* if CAN TX buffer is free, copy message to it */
-    if (zmq_req_send(buffer) && CANmodule->CANtxCount == 0)
+    if (zmq_rep_send(buffer) && CANmodule->CANtxCount == 0)
     {
         CO_CANsendcallback(CANmodule);
         CANmodule->bufferInhibitFlag = buffer->syncFlag;
@@ -383,20 +385,14 @@ CO_CANmodule_process(CO_CANmodule_t* CANmodule)
 void
 CO_CANrecv(CO_CANmodule_t* CANmodule)
 { 
+    /* receive interrupt */
     CO_CANrxMsg_t* rcvMsg;     /* pointer to received message in CAN module */
     uint16_t index;            /* index of received message */
     uint32_t rcvMsgIdent;      /* identifier of the received message */
     CO_CANrx_t* buffer = NULL; /* receive message buffer from CO_CANmodule_t object. */
     bool_t msgMatched = false;
 
-    /* send request for receive data */
-    CO_CANrxMsg_t req_recv_data = 
-    {
-        .ident = 0,
-        .dlc = 0,
-        .data = {0}
-    };
-    /* Receive data */
+    // Receive message
     CO_CANrxMsg_t data_to_recv = 
     {
         .ident = 0,
@@ -404,18 +400,18 @@ CO_CANrecv(CO_CANmodule_t* CANmodule)
         .data = {0}
     };
     printf("receiving... \n");
-    int send_status = zmq_send(requester, &req_recv_data, sizeof(CO_CANrxMsg_t), 0);
-    int recv_status = zmq_recv(requester, &data_to_recv, sizeof(CO_CANrxMsg_t), 0);
+    int recv_status = zmq_recv(replier, &data_to_recv, sizeof(CO_CANrxMsg_t), 0);
     printf("Received: CAN ID = %u, DLC = %u, data = ", data_to_recv.ident, data_to_recv.dlc);
-    for (int i = 0; i < 8; i++)
-    {
+    for (int i = 0; i < 8; i++){
         printf("%u ", data_to_recv.data[i]);
     }
     printf("\n");
+    int send_status = zmq_send(replier, &data_to_recv, sizeof(CO_CANrxMsg_t), 0);
     printf("receive status: %d send status: %d\n", recv_status, send_status);
 
-    rcvMsg = &data_to_recv;
+    rcvMsg = &data_to_recv; /* get message from module here */
     rcvMsgIdent = rcvMsg->ident;
+
     if (CANmodule->useCANrxFilters) 
     {
         /* CAN module filters are used. Message with known 11-bit identifier has been received */
@@ -472,7 +468,7 @@ CO_CANsendcallback(CO_CANmodule_t* CANmodule)
         {
             if (buffer->bufferFull) 
             {
-                if (zmq_req_send(buffer))
+                if (zmq_rep_send(buffer))
                 {
                     buffer->bufferFull = false;
                     CANmodule->CANtxCount--;
